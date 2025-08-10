@@ -1,0 +1,21 @@
+[package]
+name = "wellsourced"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+bon = "3.7.0"
+clap = { version = "4.5.43", features = ["derive"] }
+colored = "3.0.0"
+reqwest = { version = "0.12.22", default-features = false, features = [
+    "json",
+    "rustls-tls",
+] }
+tokio = { version = "1.47.1", features = ["full"] }
+winnow = "0.7.12"
+
+[profile.release]
+opt-level = 'z'
+debug = false
+lto = true
+codegen-units = 1
