@@ -1,17 +1,21 @@
 mod cli;
+mod display;
+mod linter;
 mod parser;
+mod policy;
 mod report;
 
-use std::{collections::HashSet, process::ExitCode};
+use std::process::ExitCode;
 
 use clap::Parser;
 use cli::Commands;
-use parser::RawPolicy;
 use report::{Severity, Smell};
-use reqwest::redirect::Policy;
+use reqwest::redirect::Policy as RedirectPolicy;
 
 use crate::cli::Cli;
+use crate::linter::lint;
 use crate::parser::parse_policy;
+use crate::policy::{Policy, PolicyMode};
 use crate::report::Report;
 
 #[tokio::main]
@@ -25,13 +29,13 @@ async fn main() -> ExitCode {
             header,
             follow_redirects,
         } => {
-            let (csp, cspro, origin) = if !raw_csp {
+            let (origin, enforce_set, report_set) = if !raw_csp {
                 let response = {
                     let mut client = reqwest::Client::builder()
                         .redirect(if follow_redirects {
-                            Policy::default()
+                            RedirectPolicy::default()
                         } else {
-                            Policy::none()
+                            RedirectPolicy::none()
                         })
                         .build()
                         .unwrap()
@@ -47,36 +51,28 @@ async fn main() -> ExitCode {
 
                 let origin = response.url().host_str().map(str::to_string);
 
-                let csp = response
+                let enforce_set = response
                     .headers()
                     .get_all("content-security-policy")
                     .iter()
-                    .map(|header| header.to_str().unwrap())
-                    .next()
-                    .map(str::to_string);
+                    .map(|header| header.to_str().unwrap().to_string())
+                    .collect::<Vec<_>>();
 
-                let cspro = response
+                let report_set = response
                     .headers()
                     .get_all("content-security-policy-report-only")
                     .iter()
-                    .map(|header| header.to_str().unwrap())
-                    .next()
-                    .map(str::to_string);
-                (csp, cspro, origin)
+                    .map(|header| header.to_str().unwrap().to_string())
+                    .collect::<Vec<_>>();
+
+                (origin, enforce_set, report_set)
             } else {
-                (Some(source.clone()), None, None)
+                (None, vec![source], vec![])
             };
 
             let mut report = Report::new();
 
-            let csp = match (csp, cspro) {
-                (None, Some(_)) => {
-                    report.add_smell(Smell::builder()
-                        .severity(Severity::Critical)
-                        .description("No Content-Security-Policy header found, only CSP-Report-Only header found".to_string())
-                        .build());
-                    None
-                }
+            match (enforce_set.first(), report_set.first()) {
                 (None, None) => {
                     report.add_smell(
                         Smell::builder()
@@ -84,22 +80,26 @@ async fn main() -> ExitCode {
                             .description("No Content-Security-Policy header found".to_string())
                             .build(),
                     );
-                    None
                 }
-                (Some(csp), Some(_)) => {
+                (None, Some(_)) => {
+                    report.add_smell(Smell::builder()
+                        .severity(Severity::High)
+                        .description("No Content-Security-Policy header found, only CSP-Report-Only header found".to_string())
+                        .build());
+                }
+                (Some(_), Some(_)) => {
                     report.add_smell(
                         Smell::builder()
-                            .severity(Severity::Medium)
+                            .severity(Severity::Low)
                             .description("Both CSP and CSP-Report-Only headers found".to_string())
                             .build(),
                     );
-                    Some(csp)
                 }
-                (Some(csp), None) => Some(csp),
+                (Some(_), None) => {}
             };
 
-            if let Some(csp) = csp {
-                let policy = match parse_policy(&csp) {
+            if let Some(csp) = enforce_set.first() {
+                let policy = match parse_policy(csp, PolicyMode::Enforce) {
                     Ok(policy) => policy,
                     Err(err) => {
                         report.add_smell(
@@ -111,11 +111,15 @@ async fn main() -> ExitCode {
                                 ))
                                 .build(),
                         );
-                        RawPolicy {
-                            directives: Vec::new(),
+                        Policy {
+                            mode: PolicyMode::Enforce,
+                            original: "".to_string(),
+                            directives: vec![],
                         }
                     }
                 };
+
+                println!("{}", &policy);
 
                 lint(&mut report, origin, policy);
             }
@@ -127,61 +131,6 @@ async fn main() -> ExitCode {
             } else {
                 ExitCode::SUCCESS
             };
-        }
-    }
-}
-
-fn lint(report: &mut Report, origin: Option<String>, policy: RawPolicy) {
-    let mut seen_directives = HashSet::new();
-
-    for directive in policy.directives {
-        if seen_directives.contains(&directive.name) {
-            report.add_smell(
-                Smell::builder()
-                    .severity(Severity::Medium)
-                    .description(format!("Duplicate directive: {}", directive.name))
-                    .build(),
-            );
-        }
-        seen_directives.insert(directive.name.clone());
-
-        if directive.sources.is_empty() {
-            report.add_smell(
-                Smell::builder()
-                    .severity(Severity::High)
-                    .description(format!("Empty source for directive: {}", &directive.name))
-                    .build(),
-            );
-        }
-
-        for source in directive.sources {
-            if source.starts_with("http://") {
-                report.add_smell(
-                    Smell::builder()
-                        .severity(Severity::Medium)
-                        .description(format!(
-                            "Insecure source for directive \"{}\": {}",
-                            &directive.name, &source,
-                        ))
-                        .build(),
-                );
-            }
-
-            if origin
-                .as_ref()
-                .map(|origin| source == *origin)
-                .unwrap_or(false)
-            {
-                report.add_smell(
-                    Smell::builder()
-                        .severity(Severity::Low)
-                        .description(format!(
-                            "Source \"{}\" could be replaced by 'self' for directive \"{}\"",
-                            &source, &directive.name
-                        ))
-                        .build(),
-                );
-            }
         }
     }
 }
