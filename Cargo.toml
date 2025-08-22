@@ -2,6 +2,7 @@
 name = "wellsourced"
 version = "0.1.0"
 edition = "2024"
+license = "BSD-3-Clause"
 
 [dependencies]
 bon = "3.7.1"

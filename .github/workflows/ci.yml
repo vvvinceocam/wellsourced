@@ -16,12 +16,14 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-      - run: cargo install cargo-audit cargo-nextest
+      - run: cargo install cargo-audit cargo-nextest cargo-deny
       - name: Static Analysis
         run: cargo clippy --all-targets --all-features -- -Dclippy::all
       - name: Test suite
         run: cargo nextest run
       - name: Vulnerability check
         run: cargo audit
+      - name: Check dependencies policy
+        run: cargo deny check
       - name: Build executable
         run: cargo build

@@ -8,6 +8,7 @@
     cargo-license
     cargo-nextest
     cargo-shear
+    cargo-deny
   ];
 
   languages.rust = {
