@@ -101,7 +101,7 @@ pub struct HostSource {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Host {
-    IpAddress(String),
+    IpAddress(u8, u8, u8, u8),
     Fqdn(String),
     Wildcard(String),
 }

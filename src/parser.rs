@@ -3,7 +3,7 @@ use std::ops::Range;
 use winnow::{
     LocatingSlice, Parser, Result,
     ascii::{self, dec_uint},
-    combinator::{alt, delimited, empty, eof, opt, preceded, separated, seq, terminated},
+    combinator::{alt, delimited, eof, opt, preceded, separated, seq, terminated},
     stream::AsChar,
     token::{rest, take_till, take_while},
 };
@@ -219,12 +219,6 @@ fn host_label(input: &mut &str) -> Result<String> {
         .parse_next(input)
 }
 
-fn host_part(input: &mut &str) -> Result<String> {
-    separated(1.., host_label, '.')
-        .map(|parts: Vec<String>| parts.join("."))
-        .parse_next(input)
-}
-
 fn path_part(input: &mut &str) -> Result<String> {
     (
         '/',
@@ -235,27 +229,29 @@ fn path_part(input: &mut &str) -> Result<String> {
         .parse_next(input)
 }
 
+fn host_part(input: &mut &str) -> Result<String> {
+    separated(1.., host_label, '.')
+        .map(|parts: Vec<String>| parts.join("."))
+        .parse_next(input)
+}
+
+fn ip_address(input: &mut &str) -> Result<Host> {
+    separated(4, dec_uint::<_, u8, _>, '.')
+        .map(|bytes: Vec<u8>| Host::IpAddress(bytes[0], bytes[1], bytes[2], bytes[3]))
+        .parse_next(input)
+}
+
 fn host_source(input: &mut &str) -> Result<HostSource> {
-    alt((
-        seq! {HostSource{
-            scheme: terminated(scheme_source, "//").map(Some),
-            host: alt((
-                preceded("*.", host_part).map(Host::Wildcard),
-                host_part.map(Host::Fqdn),
-            )),
-            port: opt(preceded(':', dec_uint)),
-            path: opt(path_part),
-        }},
-        seq! {HostSource{
-            scheme: empty.value(None),
-            host: alt((
-                preceded("*.", host_part).map(Host::Wildcard),
-                host_part.map(Host::Fqdn),
-            )),
-            port: opt(preceded(':', dec_uint)),
-            path: opt(path_part),
-        }},
-    ))
+    seq! {HostSource{
+        scheme: opt(terminated(scheme_source, "//")),
+        host: alt((
+            ip_address,
+            preceded("*.", host_part).map(Host::Wildcard),
+            host_part.map(Host::Fqdn),
+        )),
+        port: opt(preceded(':', dec_uint)),
+        path: opt(path_part),
+    }}
     .parse_next(input)
 }
 
@@ -313,6 +309,24 @@ mod tests {
                 SourceExpression::Host(HostSource {
                     scheme: Some(SchemeSource::Http),
                     host: Host::Fqdn("localhost".to_string()),
+                    port: None,
+                    path: None,
+                }),
+            ),
+            (
+                "127.0.0.1",
+                SourceExpression::Host(HostSource {
+                    scheme: None,
+                    host: Host::IpAddress(127, 0, 0, 1),
+                    port: None,
+                    path: None,
+                }),
+            ),
+            (
+                "http://127.0.0.1",
+                SourceExpression::Host(HostSource {
+                    scheme: Some(SchemeSource::Http),
+                    host: Host::IpAddress(127, 0, 0, 1),
                     port: None,
                     path: None,
                 }),

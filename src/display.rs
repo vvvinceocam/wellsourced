@@ -133,7 +133,7 @@ impl Display for HostSource {
         }
 
         match &self.host {
-            Host::IpAddress(ip) => write!(f, "{ip}"),
+            Host::IpAddress(a, b, c, d) => write!(f, "{a}.{b}.{c}.{d}"),
             Host::Fqdn(fqdn) => write!(f, "{fqdn}"),
             Host::Wildcard(fqdn) => write!(f, "*.{fqdn}"),
         }?;
