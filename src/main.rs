@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use clap::Parser;
 use cli::Commands;
-use report::{Severity, Smell};
+use report::{Issue, Severity};
 use reqwest::redirect::Policy as RedirectPolicy;
 
 use crate::cli::Cli;
@@ -74,22 +74,22 @@ async fn main() -> ExitCode {
 
             match (enforce_set.first(), report_set.first()) {
                 (None, None) => {
-                    report.add_smell(
-                        Smell::builder()
+                    report.add_issue(
+                        Issue::builder()
                             .severity(Severity::Critical)
                             .description("No Content-Security-Policy header found".to_string())
                             .build(),
                     );
                 }
                 (None, Some(_)) => {
-                    report.add_smell(Smell::builder()
+                    report.add_issue(Issue::builder()
                         .severity(Severity::High)
                         .description("No Content-Security-Policy header found, only CSP-Report-Only header found".to_string())
                         .build());
                 }
                 (Some(_), Some(_)) => {
-                    report.add_smell(
-                        Smell::builder()
+                    report.add_issue(
+                        Issue::builder()
                             .severity(Severity::Low)
                             .description("Both CSP and CSP-Report-Only headers found".to_string())
                             .build(),
@@ -102,8 +102,8 @@ async fn main() -> ExitCode {
                 let policy = match parse_policy(csp, PolicyMode::Enforce) {
                     Ok(policy) => policy,
                     Err(err) => {
-                        report.add_smell(
-                            Smell::builder()
+                        report.add_issue(
+                            Issue::builder()
                                 .severity(Severity::Critical)
                                 .description(format!(
                                     "Malformed Content-Security-Policy header: {}",

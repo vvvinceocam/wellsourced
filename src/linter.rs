@@ -1,68 +1,36 @@
-use std::collections::HashSet;
+pub mod rules;
 
 use crate::{
-    policy::{Host, HostSource, Policy, SchemeSource, SourceExpression},
-    report::{Report, Severity, Smell},
+    linter::rules::get_rules,
+    policy::{Directive, Policy, Source},
+    report::Report,
 };
 
+pub enum Node<'a> {
+    Policy(&'a Policy),
+    Directive(&'a Directive),
+    Source(&'a Source),
+}
+
+pub trait Rule {
+    fn check(&self, origin: Option<String>, report: &mut Report, node: Node);
+}
+
 pub fn lint(report: &mut Report, origin: Option<String>, policy: Policy) {
-    let mut seen_directives = HashSet::new();
+    let rules = get_rules();
 
-    for directive in policy.directives {
-        if seen_directives.contains(&directive.kind) {
-            report.add_smell(
-                Smell::builder()
-                    .severity(Severity::Medium)
-                    .description(format!("Duplicate directive: {}", directive.kind))
-                    .build(),
-            );
-        }
-        seen_directives.insert(directive.kind.clone());
+    for rule in &rules {
+        rule.check(origin.clone(), report, Node::Policy(&policy));
+    }
 
-        if !directive.kind.must_have_no_policy() && directive.sources.is_empty() {
-            report.add_smell(
-                Smell::builder()
-                    .severity(Severity::High)
-                    .description(format!("Empty source for directive: {}", &directive.kind))
-                    .build(),
-            );
-        }
+    for directive in &policy.directives {
+        for rule in &rules {
+            rule.check(origin.clone(), report, Node::Directive(directive));
 
-        for source in directive.sources {
-            if let SourceExpression::Host(HostSource {
-                scheme: Some(SchemeSource::Http),
-                ..
-            }) = source.expression
-            {
-                report.add_smell(
-                    Smell::builder()
-                        .severity(Severity::Medium)
-                        .description(format!(
-                            "Insecure source for directive \"{}\": {}",
-                            &directive.kind, &source,
-                        ))
-                        .build(),
-                );
-            }
-
-            if let (
-                Some(origin),
-                SourceExpression::Host(HostSource {
-                    host: Host::Fqdn(fqdn),
-                    ..
-                }),
-            ) = (&origin, &source.expression)
-                && fqdn == origin
-            {
-                report.add_smell(
-                    Smell::builder()
-                        .severity(Severity::Low)
-                        .description(format!(
-                            "Source \"{}\" could be replaced by 'self' for directive \"{}\"",
-                            &source, &directive.kind
-                        ))
-                        .build(),
-                )
+            for source in &directive.sources {
+                for rule in &rules {
+                    rule.check(origin.clone(), report, Node::Source(source));
+                }
             }
         }
     }

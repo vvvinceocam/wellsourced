@@ -2,7 +2,7 @@ use bon::Builder;
 use colored::Colorize;
 
 pub struct Report {
-    smells: Vec<Smell>,
+    smells: Vec<Issue>,
 }
 
 impl Report {
@@ -10,7 +10,7 @@ impl Report {
         Self { smells: Vec::new() }
     }
 
-    pub fn add_smell(&mut self, smell: Smell) {
+    pub fn add_issue(&mut self, smell: Issue) {
         self.smells.push(smell);
     }
 
@@ -40,7 +40,7 @@ impl Report {
 }
 
 #[derive(Builder, Debug, Clone, PartialEq, Eq, Hash, Ord, PartialOrd)]
-pub struct Smell {
+pub struct Issue {
     description: String,
     severity: Severity,
 }

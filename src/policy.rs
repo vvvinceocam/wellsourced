@@ -136,7 +136,7 @@ pub struct HashSource {
 pub struct NonceSource(pub String);
 
 impl DirectiveKind {
-    pub fn must_have_no_policy(&self) -> bool {
+    pub fn must_have_no_source(&self) -> bool {
         use DirectiveKind::*;
 
         matches!(
