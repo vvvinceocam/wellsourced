@@ -3,7 +3,7 @@ use std::ops::Range;
 use winnow::{
     LocatingSlice, Parser, Result,
     ascii::{self, dec_uint},
-    combinator::{alt, delimited, empty, opt, preceded, separated, seq, terminated},
+    combinator::{alt, delimited, empty, eof, opt, preceded, separated, seq, terminated},
     stream::AsChar,
     token::{rest, take_till, take_while},
 };
@@ -132,8 +132,8 @@ fn source(input: &mut LocatingSlice<&str>) -> Result<Source> {
             keyword_source.map(Keyword),
             nonce_source.map(Nonce),
             hash_source.map(Hash),
-            host_source.map(Host),
-            scheme_source.map(Scheme),
+            terminated(scheme_source, eof).map(Scheme),
+            terminated(host_source, eof).map(Host),
             rest.map(|str: &str| Unknown(str.to_string())),
         )))
         .with_span()
@@ -220,7 +220,7 @@ fn host_label(input: &mut &str) -> Result<String> {
 }
 
 fn host_part(input: &mut &str) -> Result<String> {
-    separated(2.., host_label, '.')
+    separated(1.., host_label, '.')
         .map(|parts: Vec<String>| parts.join("."))
         .parse_next(input)
 }
@@ -307,6 +307,37 @@ mod tests {
                     port: Some(8080),
                     path: Some("/some/path".to_string()),
                 }),
+            ),
+            (
+                "http://localhost",
+                SourceExpression::Host(HostSource {
+                    scheme: Some(SchemeSource::Http),
+                    host: Host::Fqdn("localhost".to_string()),
+                    port: None,
+                    path: None,
+                }),
+            ),
+            (
+                "localhost/login",
+                SourceExpression::Host(HostSource {
+                    scheme: None,
+                    host: Host::Fqdn("localhost".to_string()),
+                    port: None,
+                    path: Some("/login".to_string()),
+                }),
+            ),
+            (
+                "https:9000/login",
+                SourceExpression::Host(HostSource {
+                    scheme: None,
+                    host: Host::Fqdn("https".to_string()),
+                    port: Some(9000),
+                    path: Some("/login".to_string()),
+                }),
+            ),
+            (
+                "https:/login",
+                SourceExpression::Unknown("https:/login".to_string()),
             ),
             (
                 "*.other.com",
