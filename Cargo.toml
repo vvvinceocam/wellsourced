@@ -6,14 +6,14 @@ license = "BSD-3-Clause"
 
 [dependencies]
 bon = "3.7.1"
-clap = { version = "4.5.45", features = ["derive"] }
+clap = { version = "4.5.46", features = ["derive"] }
 colored = "3.0.0"
 reqwest = { version = "0.12.23", default-features = false, features = [
     "json",
     "rustls-tls",
 ] }
 tokio = { version = "1.47.1", features = ["full"] }
-winnow = "0.7.12"
+winnow = "0.7.13"
 
 [profile.release]
 opt-level = 'z'
