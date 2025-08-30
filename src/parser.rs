@@ -9,8 +9,8 @@ use winnow::{
 };
 
 use crate::policy::{
-    Directive, DirectiveKind, HashAlgorithm, HashSource, Host, HostSource, KeywordSource,
-    NonceSource, Policy, PolicyMode, SchemeSource, Source, SourceExpression,
+    Directive, DirectiveKind, Disposition, HashAlgorithm, HashSource, Host, HostSource,
+    KeywordSource, NonceSource, Policy, SchemeSource, Source, SourceExpression,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,7 +32,7 @@ impl std::fmt::Display for ParserError {
 
 impl std::error::Error for ParserError {}
 
-pub fn parse_policy(raw_policy: &str, mode: PolicyMode) -> Result<Policy, ParserError> {
+pub fn parse_policy(raw_policy: &str, disposition: Disposition) -> Result<Policy, ParserError> {
     let original = raw_policy.to_string();
     let directives = delimited(
         ascii::multispace0,
@@ -45,7 +45,7 @@ pub fn parse_policy(raw_policy: &str, mode: PolicyMode) -> Result<Policy, Parser
     Ok(Policy {
         directives,
         original,
-        mode,
+        disposition,
     })
 }
 
@@ -376,7 +376,7 @@ mod tests {
     fn parse_multi_directive_policy() {
         let policy = parse_policy(
             "default-src 'self'; script-src 'self' 'unsafe-inline' https: http://example.com:8080/foo/bar",
-            PolicyMode::Enforce,
+            Disposition::Enforce,
         ).unwrap();
         assert_eq!(policy.directives.len(), 2);
         assert_eq!(policy.directives[0].kind, DirectiveKind::DefaultSrc);

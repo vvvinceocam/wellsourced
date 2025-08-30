@@ -15,7 +15,7 @@ use reqwest::redirect::Policy as RedirectPolicy;
 use crate::cli::Cli;
 use crate::linter::lint;
 use crate::parser::parse_policy;
-use crate::policy::{Policy, PolicyMode};
+use crate::policy::{Disposition, Policy};
 use crate::report::Report;
 
 #[tokio::main]
@@ -99,7 +99,7 @@ async fn main() -> ExitCode {
             };
 
             if let Some(csp) = enforce_set.first() {
-                let policy = match parse_policy(csp, PolicyMode::Enforce) {
+                let policy = match parse_policy(csp, Disposition::Enforce) {
                     Ok(policy) => policy,
                     Err(err) => {
                         report.add_issue(
@@ -112,7 +112,7 @@ async fn main() -> ExitCode {
                                 .build(),
                         );
                         Policy {
-                            mode: PolicyMode::Enforce,
+                            disposition: Disposition::Enforce,
                             original: "".to_string(),
                             directives: vec![],
                         }
