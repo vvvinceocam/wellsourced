@@ -3,14 +3,14 @@ use std::ops::Range;
 use winnow::{
     LocatingSlice, Parser, Result,
     ascii::{self, dec_uint},
-    combinator::{alt, delimited, empty, opt, preceded, separated, seq, terminated},
+    combinator::{alt, delimited, eof, opt, preceded, separated, seq, terminated},
     stream::AsChar,
-    token::{take_till, take_while},
+    token::{rest, take_till, take_while},
 };
 
 use crate::policy::{
-    Directive, DirectiveKind, HashAlgorithm, HashSource, Host, HostSource, KeywordSource,
-    NonceSource, Policy, PolicyMode, SchemeSource, Source, SourceExpression,
+    Directive, DirectiveKind, Disposition, HashAlgorithm, HashSource, Host, HostSource,
+    KeywordSource, NonceSource, Policy, SchemeSource, Source, SourceExpression,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -32,7 +32,7 @@ impl std::fmt::Display for ParserError {
 
 impl std::error::Error for ParserError {}
 
-pub fn parse_policy(raw_policy: &str, mode: PolicyMode) -> Result<Policy, ParserError> {
+pub fn parse_policy(raw_policy: &str, disposition: Disposition) -> Result<Policy, ParserError> {
     let original = raw_policy.to_string();
     let directives = delimited(
         ascii::multispace0,
@@ -45,7 +45,7 @@ pub fn parse_policy(raw_policy: &str, mode: PolicyMode) -> Result<Policy, Parser
     Ok(Policy {
         directives,
         original,
-        mode,
+        disposition,
     })
 }
 
@@ -55,6 +55,10 @@ fn is_name_char(c: char) -> bool {
 
 fn is_base64_char(c: char) -> bool {
     c.is_ascii_alphanumeric() || ['-', '_', '%', '/', '=', '+'].contains(&c)
+}
+
+fn is_source_char(c: char) -> bool {
+    !(c.is_ascii_whitespace() || c == ';')
 }
 
 fn directives(input: &mut LocatingSlice<&str>) -> Result<Vec<Directive>> {
@@ -82,63 +86,62 @@ fn directive(input: &mut LocatingSlice<&str>) -> Result<Directive> {
 
 fn directive_kind(input: &mut LocatingSlice<&str>) -> Result<(DirectiveKind, Range<usize>)> {
     use DirectiveKind::*;
-    alt((
-        alt([
-            "default-src".value(DefaultSrc),
-            "font-src".value(FontSrc),
-            "script-src".value(ScriptSrc),
-            "script-src-attr".value(ScriptSrcAttr),
-            "script-src-elem".value(ScriptSrcElem),
-            "style-src".value(StyleSrc),
-            "style-src-attr".value(StyleSrcAttr),
-            "style-src-elem".value(StyleSrcElem),
-            "trusted-types".value(TrustedTypes),
-            "img-src".value(ImgSrc),
-            "child-src".value(ChildSrc),
-            "manifest-src".value(ManifestSrc),
-            "media-src".value(MediaSrc),
-            "object-src".value(ObjectSrc),
-            "connect-src".value(ConnectSrc),
-            "plugin-types".value(PluginTypes),
-            "prefetch-src".value(PrefetchSrc),
-            "frame-src".value(FrameSrc),
-            "fence-frame-src".value(FenceFrameSrc),
-            "worker-src".value(WorkerSrc),
-            "report-to".value(ReportTo),
-            "report-uri".value(ReportUri),
-            "base-uri".value(BaseUri),
-            "form-action".value(FormAction),
-            "frame-ancestors".value(FrameAncestors),
-            "navigation-src".value(NavigationSrc),
-            "sandbox".value(Sandbox),
-            "upgrade-insecure-requests".value(UpgradeInsecureRequests),
-            "require-trusted-types-for".value(RequireTrustedTypesFor),
-            "block-all-mixed-content".value(BlockAllMixedContent),
-        ]),
-        take_while(1.., is_name_char).map(|unknown: &str| Unknown(unknown.to_string())),
-    ))
-    .with_span()
-    .parse_next(input)
+    take_while(1.., is_name_char)
+        .map(|name: &str| match name {
+            "default-src" => DefaultSrc,
+            "font-src" => FontSrc,
+            "script-src" => ScriptSrc,
+            "script-src-attr" => ScriptSrcAttr,
+            "script-src-elem" => ScriptSrcElem,
+            "style-src" => StyleSrc,
+            "style-src-attr" => StyleSrcAttr,
+            "style-src-elem" => StyleSrcElem,
+            "trusted-types" => TrustedTypes,
+            "img-src" => ImgSrc,
+            "child-src" => ChildSrc,
+            "manifest-src" => ManifestSrc,
+            "media-src" => MediaSrc,
+            "object-src" => ObjectSrc,
+            "connect-src" => ConnectSrc,
+            "plugin-types" => PluginTypes,
+            "prefetch-src" => PrefetchSrc,
+            "frame-src" => FrameSrc,
+            "fence-frame-src" => FenceFrameSrc,
+            "worker-src" => WorkerSrc,
+            "report-to" => ReportTo,
+            "report-uri" => ReportUri,
+            "base-uri" => BaseUri,
+            "form-action" => FormAction,
+            "frame-ancestors" => FrameAncestors,
+            "navigation-src" => NavigationSrc,
+            "sandbox" => Sandbox,
+            "upgrade-insecure-requests" => UpgradeInsecureRequests,
+            "require-trusted-types-for" => RequireTrustedTypesFor,
+            "block-all-mixed-content" => BlockAllMixedContent,
+            _ => Unknown(name.to_string()),
+        })
+        .with_span()
+        .parse_next(input)
 }
 
 fn source(input: &mut LocatingSlice<&str>) -> Result<Source> {
     use SourceExpression::*;
 
-    alt((
-        keyword_source.map(Keyword),
-        nonce_source.map(Nonce),
-        hash_source.map(Hash),
-        host_source.map(Host),
-        scheme_source.map(Scheme),
-        take_till(1.., |c: char| c.is_ascii_whitespace() || c == ';')
-            .map(|str: &str| Unknown(str.to_string())),
-    ))
-    .with_span()
-    .map(|(expression, span)| Source { expression, span })
-    .parse_next(input)
+    take_while(1.., is_source_char)
+        .and_then(alt((
+            keyword_source.map(Keyword),
+            nonce_source.map(Nonce),
+            hash_source.map(Hash),
+            terminated(scheme_source, eof).map(Scheme),
+            terminated(host_source, eof).map(Host),
+            rest.map(|str: &str| Unknown(str.to_string())),
+        )))
+        .with_span()
+        .map(|(expression, span)| Source { expression, span })
+        .parse_next(input)
 }
 
-fn keyword_source(input: &mut LocatingSlice<&str>) -> Result<KeywordSource> {
+fn keyword_source(input: &mut &str) -> Result<KeywordSource> {
     use KeywordSource::*;
     alt([
         "'none'".value(None),
@@ -154,19 +157,19 @@ fn keyword_source(input: &mut LocatingSlice<&str>) -> Result<KeywordSource> {
     .parse_next(input)
 }
 
-fn nonce_source(input: &mut LocatingSlice<&str>) -> Result<NonceSource> {
+fn nonce_source(input: &mut &str) -> Result<NonceSource> {
     delimited("'nonce-", nonce, "'")
         .map(NonceSource)
         .parse_next(input)
 }
 
-fn nonce(input: &mut LocatingSlice<&str>) -> Result<String> {
+fn nonce(input: &mut &str) -> Result<String> {
     take_while(1.., is_base64_char)
         .map(|nonce: &str| nonce.to_string())
         .parse_next(input)
 }
 
-fn hash_source(input: &mut LocatingSlice<&str>) -> Result<HashSource> {
+fn hash_source(input: &mut &str) -> Result<HashSource> {
     seq! {HashSource {
         _: '\'',
         algorithm: hash_algorithm,
@@ -177,7 +180,7 @@ fn hash_source(input: &mut LocatingSlice<&str>) -> Result<HashSource> {
     .parse_next(input)
 }
 
-fn hash_algorithm(input: &mut LocatingSlice<&str>) -> Result<HashAlgorithm> {
+fn hash_algorithm(input: &mut &str) -> Result<HashAlgorithm> {
     use HashAlgorithm::*;
     alt((
         "sha256".value(Sha256),
@@ -187,13 +190,13 @@ fn hash_algorithm(input: &mut LocatingSlice<&str>) -> Result<HashAlgorithm> {
     .parse_next(input)
 }
 
-fn digest(input: &mut LocatingSlice<&str>) -> Result<String> {
+fn digest(input: &mut &str) -> Result<String> {
     take_while(1.., is_base64_char)
         .map(|digest: &str| digest.to_string())
         .parse_next(input)
 }
 
-fn scheme_source(input: &mut LocatingSlice<&str>) -> Result<SchemeSource> {
+fn scheme_source(input: &mut &str) -> Result<SchemeSource> {
     use SchemeSource::*;
     alt((
         "http:".value(Http),
@@ -210,19 +213,13 @@ fn scheme_source(input: &mut LocatingSlice<&str>) -> Result<SchemeSource> {
     .parse_next(input)
 }
 
-fn host_label(input: &mut LocatingSlice<&str>) -> Result<String> {
+fn host_label(input: &mut &str) -> Result<String> {
     take_while(1.., |c: char| c.is_ascii_alphanumeric() || c == '-')
         .map(|part: &str| part.to_string())
         .parse_next(input)
 }
 
-fn host_part(input: &mut LocatingSlice<&str>) -> Result<String> {
-    separated(2.., host_label, '.')
-        .map(|parts: Vec<String>| parts.join("."))
-        .parse_next(input)
-}
-
-fn path_part(input: &mut LocatingSlice<&str>) -> Result<String> {
+fn path_part(input: &mut &str) -> Result<String> {
     (
         '/',
         take_till(0.., |c: char| c.is_space() || c == ';' || c == ','),
@@ -232,27 +229,29 @@ fn path_part(input: &mut LocatingSlice<&str>) -> Result<String> {
         .parse_next(input)
 }
 
-fn host_source(input: &mut LocatingSlice<&str>) -> Result<HostSource> {
-    alt((
-        seq! {HostSource{
-            scheme: terminated(scheme_source, "//").map(Some),
-            host: alt((
-                preceded("*.", host_part).map(Host::Wildcard),
-                host_part.map(Host::Fqdn),
-            )),
-            port: opt(preceded(':', dec_uint)),
-            path: opt(path_part),
-        }},
-        seq! {HostSource{
-            scheme: empty.value(None),
-            host: alt((
-                preceded("*.", host_part).map(Host::Wildcard),
-                host_part.map(Host::Fqdn),
-            )),
-            port: opt(preceded(':', dec_uint)),
-            path: opt(path_part),
-        }},
-    ))
+fn host_part(input: &mut &str) -> Result<String> {
+    separated(1.., host_label, '.')
+        .map(|parts: Vec<String>| parts.join("."))
+        .parse_next(input)
+}
+
+fn ip_address(input: &mut &str) -> Result<Host> {
+    separated(4, dec_uint::<_, u8, _>, '.')
+        .map(|bytes: Vec<u8>| Host::IpAddress(bytes[0], bytes[1], bytes[2], bytes[3]))
+        .parse_next(input)
+}
+
+fn host_source(input: &mut &str) -> Result<HostSource> {
+    seq! {HostSource{
+        scheme: opt(terminated(scheme_source, "//")),
+        host: alt((
+            ip_address,
+            preceded("*.", host_part).map(Host::Wildcard),
+            host_part.map(Host::Fqdn),
+        )),
+        port: opt(preceded(':', dec_uint)),
+        path: opt(path_part),
+    }}
     .parse_next(input)
 }
 
@@ -263,10 +262,121 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_parse_policy() {
+    fn parse_source() {
+        let cases = [
+            ("'self'", SourceExpression::Keyword(KeywordSource::Self_)),
+            ("'self';", SourceExpression::Keyword(KeywordSource::Self_)),
+            (
+                "'self' 'foo'",
+                SourceExpression::Keyword(KeywordSource::Self_),
+            ),
+            ("'none'", SourceExpression::Keyword(KeywordSource::None)),
+            (
+                "'strict-dynamic'",
+                SourceExpression::Keyword(KeywordSource::StrictDynamic),
+            ),
+            ("wss:", SourceExpression::Scheme(SchemeSource::Wss)),
+            ("wss: ", SourceExpression::Scheme(SchemeSource::Wss)),
+            ("wss:;", SourceExpression::Scheme(SchemeSource::Wss)),
+            (
+                "wss: example.com",
+                SourceExpression::Scheme(SchemeSource::Wss),
+            ),
+            ("https:", SourceExpression::Scheme(SchemeSource::Https)),
+            ("blob:", SourceExpression::Scheme(SchemeSource::Blob)),
+            (
+                "'nonce-x1234567890'",
+                SourceExpression::Nonce(NonceSource("x1234567890".to_string())),
+            ),
+            (
+                "'sha256-0987654321'",
+                SourceExpression::Hash(HashSource {
+                    algorithm: HashAlgorithm::Sha256,
+                    digest: "0987654321".to_string(),
+                }),
+            ),
+            (
+                "https://example.com:8080/some/path",
+                SourceExpression::Host(HostSource {
+                    scheme: Some(SchemeSource::Https),
+                    host: Host::Fqdn("example.com".to_string()),
+                    port: Some(8080),
+                    path: Some("/some/path".to_string()),
+                }),
+            ),
+            (
+                "http://localhost",
+                SourceExpression::Host(HostSource {
+                    scheme: Some(SchemeSource::Http),
+                    host: Host::Fqdn("localhost".to_string()),
+                    port: None,
+                    path: None,
+                }),
+            ),
+            (
+                "127.0.0.1",
+                SourceExpression::Host(HostSource {
+                    scheme: None,
+                    host: Host::IpAddress(127, 0, 0, 1),
+                    port: None,
+                    path: None,
+                }),
+            ),
+            (
+                "http://127.0.0.1",
+                SourceExpression::Host(HostSource {
+                    scheme: Some(SchemeSource::Http),
+                    host: Host::IpAddress(127, 0, 0, 1),
+                    port: None,
+                    path: None,
+                }),
+            ),
+            (
+                "localhost/login",
+                SourceExpression::Host(HostSource {
+                    scheme: None,
+                    host: Host::Fqdn("localhost".to_string()),
+                    port: None,
+                    path: Some("/login".to_string()),
+                }),
+            ),
+            (
+                "https:9000/login",
+                SourceExpression::Host(HostSource {
+                    scheme: None,
+                    host: Host::Fqdn("https".to_string()),
+                    port: Some(9000),
+                    path: Some("/login".to_string()),
+                }),
+            ),
+            (
+                "https:/login",
+                SourceExpression::Unknown("https:/login".to_string()),
+            ),
+            (
+                "*.other.com",
+                SourceExpression::Host(HostSource {
+                    scheme: None,
+                    host: Host::Wildcard("other.com".to_string()),
+                    port: None,
+                    path: None,
+                }),
+            ),
+            ("'foo'", SourceExpression::Unknown("'foo'".to_string())),
+        ];
+
+        for (input, expected) in cases {
+            let input = LocatingSlice::new(input);
+            let (_, Source { expression, .. }) = source.parse_peek(input).unwrap();
+            assert_eq!(expression, expected);
+        }
+    }
+
+    #[test]
+    fn parse_multi_directive_policy() {
         let policy = parse_policy(
             "default-src 'self'; script-src 'self' 'unsafe-inline' https: http://example.com:8080/foo/bar",
-            PolicyMode::Enforce,
+            Disposition::Enforce,
         ).unwrap();
         assert_eq!(policy.directives.len(), 2);
         assert_eq!(policy.directives[0].kind, DirectiveKind::DefaultSrc);

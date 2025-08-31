@@ -1,15 +1,15 @@
 use std::ops::Range;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PolicyMode {
+pub enum Disposition {
     Enforce,
-    ReportOnly,
+    Report,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Policy {
     pub original: String,
-    pub mode: PolicyMode,
+    pub disposition: Disposition,
     pub directives: Vec<Directive>,
 }
 
@@ -101,7 +101,7 @@ pub struct HostSource {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Host {
-    IpAddress(String),
+    IpAddress(u8, u8, u8, u8),
     Fqdn(String),
     Wildcard(String),
 }
