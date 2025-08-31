@@ -25,12 +25,12 @@ async fn main() -> ExitCode {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::Lint {
-            raw_csp,
+        Commands::Audit {
+            raw,
             source,
-            header,
+            headers,
             follow_redirects,
-        } => run_linter(raw_csp, source, header, follow_redirects).await,
+        } => run_audit(raw, source, headers, follow_redirects).await,
         Commands::Collector {
             address,
             webhook_url,
@@ -51,13 +51,13 @@ async fn run_collector(address: String, webhook_url: String, webhook_template: S
     ExitCode::SUCCESS
 }
 
-async fn run_linter(
-    raw_csp: bool,
+async fn run_audit(
+    raw: bool,
     source: String,
-    header: Vec<String>,
+    headers: Vec<String>,
     follow_redirects: bool,
 ) -> ExitCode {
-    let (origin, enforce_set, report_set) = if !raw_csp {
+    let (origin, enforce_set, report_set) = if !raw {
         let response = {
             let mut client = reqwest::Client::builder()
                 .redirect(if follow_redirects {
@@ -69,7 +69,7 @@ async fn run_linter(
                 .unwrap()
                 .get(source);
 
-            for header in header {
+            for header in headers {
                 let (name, value) = header.split_once(':').unwrap();
                 client = client.header(name, value);
             }

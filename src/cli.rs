@@ -1,29 +1,33 @@
-use clap::{ArgAction, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 
 #[derive(Debug, Clone, Parser)]
 pub struct Cli {
-    #[arg(short, long, action = ArgAction::Count)]
-    pub debug: u8,
-
     #[clap(subcommand)]
     pub command: Commands,
 }
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum Commands {
-    Lint {
+    /// Audit a website for CSP issues.
+    Audit {
+        /// Whether to process source as a raw policy string.
         #[arg(short, long, default_value_t = false)]
-        raw_csp: bool,
+        raw: bool,
 
+        /// Whether to follow redirects when fetching the source.
         #[arg(short, long, default_value_t = false)]
         follow_redirects: bool,
 
-        #[arg(short = 'H', long)]
-        header: Vec<String>,
+        /// Additional headers to send with the request.
+        ///
+        /// Can be specified multiple times.
+        #[arg(short = 'H', long = "header")]
+        headers: Vec<String>,
 
+        /// Source URL to audit. Or raw policy string if --raw is set.
         source: String,
     },
-    /// Run a web server to collect CSP reports
+    /// Run a web server to collect CSP reports.
     ///
     /// Reports are logged to stdout and sent to the webhook URL.
     Collector {
@@ -39,9 +43,9 @@ pub enum Commands {
         ///
         /// Use `{{ variable }}` syntax to insert variables into the template.
         ///
-        /// Avalaible variables: blocked-uri, document-uri, effective-directive,
+        /// Available variables: blocked-uri, document-uri, effective-directive,
         /// original-policy, referrer, status-code, violated-directive,
-        /// source-file, line-number, source-file
+        /// source-file, line-number, column-number
         #[arg(short = 't', long)]
         webhook_template: String,
     },
