@@ -6,5 +6,5 @@
 
 It provides 2 sub-commands:
 - `wellsourced audit`: audit CSP headers of a website;
-- `wellsourced collector`: microservice to collect CSP headers from a website, logging them and sending them
+- `wellsourced collect`: microservice to collect CSP headers from a website, logging them and sending them
   to a webhook.

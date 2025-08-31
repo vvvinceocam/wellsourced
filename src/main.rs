@@ -31,15 +31,15 @@ async fn main() -> ExitCode {
             headers,
             follow_redirects,
         } => run_audit(raw, source, headers, follow_redirects).await,
-        Commands::Collector {
+        Commands::Collect {
             address,
             webhook_url,
             webhook_template,
-        } => run_collector(address, webhook_url, webhook_template).await,
+        } => run_collect(address, webhook_url, webhook_template).await,
     }
 }
 
-async fn run_collector(address: String, webhook_url: String, webhook_template: String) -> ExitCode {
+async fn run_collect(address: String, webhook_url: String, webhook_template: String) -> ExitCode {
     tracing_subscriber::fmt().json().init();
 
     let config = CollectorConfig {

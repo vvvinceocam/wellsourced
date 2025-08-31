@@ -30,7 +30,7 @@ pub enum Commands {
     /// Run a web server to collect CSP reports.
     ///
     /// Reports are logged to stdout and sent to the webhook URL.
-    Collector {
+    Collect {
         /// Address to bind to the web server.
         #[arg(short, long, default_value_t = String::from("0.0.0.0:8080"))]
         address: String,
