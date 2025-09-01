@@ -31,6 +31,14 @@ scripts, stylesheets, images, and fonts, effectively preventing malicious script
 - Logging of policy violations
 - Webhook integration for real-time notifications and alerting
 
+## Installation
+
+To install `wellsourced` from source, run:
+
+```bash
+cargo install --git https://github.com/vvvinceocam/wellsourced.git
+```
+
 ## Quick Start
 
 ### Audit a Website's CSP
