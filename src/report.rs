@@ -2,35 +2,35 @@ use bon::Builder;
 use colored::Colorize;
 
 pub struct Report {
-    smells: Vec<Issue>,
+    issues: Vec<Issue>,
 }
 
 impl Report {
     pub fn new() -> Self {
-        Self { smells: Vec::new() }
+        Self { issues: Vec::new() }
     }
 
-    pub fn add_issue(&mut self, smell: Issue) {
-        self.smells.push(smell);
+    pub fn add_issue(&mut self, issue: Issue) {
+        self.issues.push(issue);
     }
 
     pub fn reaches_severity(&self, severity: Severity) -> bool {
-        self.smells.iter().any(|smell| smell.severity <= severity)
+        self.issues.iter().any(|issue| issue.severity <= severity)
     }
 
     pub fn show(&self) {
-        let smells = {
-            let mut smells = self.smells.clone();
-            smells.sort_by_key(|smell| smell.severity);
-            smells
+        let issues = {
+            let mut issues = self.issues.clone();
+            issues.sort_by_key(|issue| issue.severity);
+            issues
         };
 
-        for smell in smells {
-            match smell.severity {
-                Severity::Critical => print!("{}: {}", "Critical".bright_red(), smell.description),
-                Severity::High => print!("{}: {}", "High".red(), smell.description),
-                Severity::Medium => print!("{}: {}", "Medium".yellow(), smell.description),
-                Severity::Low => print!("{}: {}", "Low".white(), smell.description),
+        for issue in issues {
+            match issue.severity {
+                Severity::Critical => print!("{}: {}", "Critical".bright_red(), issue.description),
+                Severity::High => print!("{}: {}", "High".red(), issue.description),
+                Severity::Medium => print!("{}: {}", "Medium".yellow(), issue.description),
+                Severity::Low => print!("{}: {}", "Low".white(), issue.description),
             }
             println!();
         }
