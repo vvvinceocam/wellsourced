@@ -48,5 +48,11 @@ pub enum Commands {
         /// source-file, line-number, column-number
         #[arg(short = 't', long)]
         webhook_template: String,
+
+        /// Additional headers to send with the webhook request.
+        ///
+        /// Can be specified multiple times.
+        #[arg(short = 'H', long = "webhook-header", num_args = 0..)]
+        webhook_headers: Vec<String>,
     },
 }

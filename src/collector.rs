@@ -1,4 +1,4 @@
-use axum::{Json, Router, extract::State, routing::post};
+use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
 use handlebars::{Handlebars, no_escape};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -41,25 +41,29 @@ async fn post_report(
         "lineNumber" = csp_report.line_number,
         "columnNumber" = csp_report.column_number,
     );
-    let mut reg = Handlebars::new();
-    reg.register_escape_fn(no_escape);
 
-    let payload = reg
-        .render_template(&state.webhook_template, &csp_report)
-        .unwrap();
+    tokio::spawn(async move {
+        let mut reg = Handlebars::new();
+        reg.register_escape_fn(no_escape);
 
-    let response = state
-        .client
-        .post(state.webhook_url)
-        .header("Content-Type", "application/json")
-        .body(payload)
-        .send()
-        .await
-        .unwrap();
+        let payload = reg
+            .render_template(&state.webhook_template, &csp_report)
+            .unwrap();
 
-    if !response.status().is_success() {
-        error!("failed to post webhook");
-    }
+        let response = state
+            .client
+            .post(state.webhook_url)
+            .headers(state.webhook_headers)
+            .header("Content-Type", "application/json")
+            .body(payload)
+            .send()
+            .await
+            .unwrap();
+
+        if !response.status().is_success() {
+            error!("failed to post webhook");
+        }
+    });
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +71,7 @@ pub struct CollectorConfig {
     pub address: String,
     pub webhook_url: String,
     pub webhook_template: String,
+    pub webhook_headers: HeaderMap,
 }
 
 #[derive(Debug, Clone)]
@@ -74,6 +79,7 @@ pub struct AppState {
     client: Client,
     webhook_url: String,
     webhook_template: String,
+    webhook_headers: HeaderMap,
 }
 
 pub async fn start_server(config: CollectorConfig) {
@@ -81,6 +87,7 @@ pub async fn start_server(config: CollectorConfig) {
         client: Client::new(),
         webhook_url: config.webhook_url,
         webhook_template: config.webhook_template,
+        webhook_headers: config.webhook_headers,
     };
 
     info!("starting server listening on {}", config.address);

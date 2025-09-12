@@ -8,6 +8,7 @@ license = "BSD-3-Clause"
 axum = "0.8.4"
 bon = "3.7.1"
 clap = { version = "4.5.46", features = ["derive"] }
+color-eyre = "0.6.5"
 colored = "3.0.0"
 handlebars = "6.3.2"
 reqwest = { version = "0.12.23", default-features = false, features = [
