@@ -10,7 +10,7 @@ bon = "3.7.1"
 clap = { version = "4.5.46", features = ["derive"] }
 color-eyre = "0.6.5"
 colored = "3.0.0"
-regex = "1.11.2"
+lazy-regex = "3.4.1"
 reqwest = { version = "0.12.23", default-features = false, features = [
     "json",
     "rustls-tls",
@@ -29,6 +29,6 @@ lto = true
 codegen-units = 1
 
 [lints.clippy]
-panic = "warn"
-unwrap_used = "warn"
-expect_used = "warn"
+panic = "deny"
+unwrap_used = "deny"
+expect_used = "deny"

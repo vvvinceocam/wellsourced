@@ -1,12 +1,7 @@
-use std::sync::LazyLock;
-
 use color_eyre::Result;
-use regex::Regex;
+use lazy_regex::regex_captures_iter;
 use serde::Serialize;
 use serde_json::Value;
-
-static PLACEHOLDER_REGEX: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"\{\{\s*([^}]+)\s*\}\}").expect("valid regex pattern"));
 
 /// Simple template rendering function. Use the common `{{ variable }}` syntax.
 ///
@@ -19,7 +14,7 @@ pub fn render<T: Serialize>(template: &str, context: &T) -> Result<String> {
     let context_value = serde_json::to_value(context)?;
     let mut result = template.to_string();
 
-    for cap in PLACEHOLDER_REGEX.captures_iter(template) {
+    for cap in regex_captures_iter!(r"\{\{\s*([^}]+)\s*\}\}", template) {
         let full_match = &cap[0];
         let field_path = cap[1].trim();
 

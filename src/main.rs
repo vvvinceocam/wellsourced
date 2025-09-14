@@ -5,6 +5,7 @@ mod linter;
 mod parser;
 mod policy;
 mod report;
+mod utils;
 
 use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use clap::Parser;
@@ -15,12 +16,15 @@ use color_eyre::{
 use report::{Issue, Severity};
 use reqwest::redirect::Policy as RedirectPolicy;
 
-use crate::cli::{Cli, Commands};
 use crate::collector::{CollectorConfig, start_server};
 use crate::linter::lint;
 use crate::parser::parse_policy;
 use crate::policy::{Disposition, Policy};
 use crate::report::Report;
+use crate::{
+    cli::{Cli, Commands},
+    utils::collect_headers,
+};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -94,33 +98,22 @@ async fn run_audit(
                 } else {
                     RedirectPolicy::none()
                 })
-                .build()
-                .unwrap()
+                .build()?
                 .get(source);
 
             for header in headers {
-                let (name, value) = header.split_once(':').unwrap();
+                let (name, value) = header
+                    .split_once(':')
+                    .ok_or_else(|| eyre!("Invalid header format"))?;
                 client = client.header(name, value);
             }
 
-            client.send().await.unwrap()
+            client.send().await?
         };
 
         let origin = response.url().host_str().map(str::to_string);
-
-        let enforce_set = response
-            .headers()
-            .get_all("content-security-policy")
-            .iter()
-            .map(|header| header.to_str().unwrap().to_string())
-            .collect::<Vec<_>>();
-
-        let report_set = response
-            .headers()
-            .get_all("content-security-policy-report-only")
-            .iter()
-            .map(|header| header.to_str().unwrap().to_string())
-            .collect::<Vec<_>>();
+        let enforce_set = collect_headers(&response, "content-security-policy")?;
+        let report_set = collect_headers(&response, "content-security-policy-report-only")?;
 
         (origin, enforce_set, report_set)
     } else {
