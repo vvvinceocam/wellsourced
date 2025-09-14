@@ -10,7 +10,7 @@ use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use clap::Parser;
 use color_eyre::{
     Result,
-    eyre::{Context, ContextCompat, eyre},
+    eyre::{Context, eyre},
 };
 use report::{Issue, Severity};
 use reqwest::redirect::Policy as RedirectPolicy;
@@ -57,9 +57,9 @@ async fn run_collect(
         webhook_headers
             .iter()
             .map(|header| {
-                let (name, value) = header.split_once(':').wrap_err(
-                    "webhook header '{header}' is malformed: expected '<name>:<value>'",
-                )?;
+                let (name, value) = header.split_once(':').ok_or(eyre!(
+                    "webhook header '{header}' is malformed: expected '<name>:<value>'"
+                ))?;
                 let name = HeaderName::from_bytes(name.as_bytes())
                     .wrap_err("webhook header '{header}' is malformed: invalid header name")?;
                 let value = HeaderValue::from_str(value)
@@ -76,7 +76,7 @@ async fn run_collect(
         webhook_template,
         webhook_headers,
     };
-    start_server(config).await;
+    start_server(config).await?;
     Ok(())
 }
 
