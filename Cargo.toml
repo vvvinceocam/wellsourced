@@ -8,8 +8,9 @@ license = "BSD-3-Clause"
 axum = "0.8.4"
 bon = "3.7.1"
 clap = { version = "4.5.46", features = ["derive"] }
+color-eyre = "0.6.5"
 colored = "3.0.0"
-handlebars = "6.3.2"
+regex = "1.11.2"
 reqwest = { version = "0.12.23", default-features = false, features = [
     "json",
     "rustls-tls",
@@ -26,3 +27,8 @@ opt-level = 'z'
 debug = false
 lto = true
 codegen-units = 1
+
+[lints.clippy]
+panic = "warn"
+unwrap_used = "warn"
+expect_used = "warn"

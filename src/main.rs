@@ -6,14 +6,16 @@ mod parser;
 mod policy;
 mod report;
 
-use std::process::ExitCode;
-
+use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use clap::Parser;
-use cli::Commands;
+use color_eyre::{
+    Result,
+    eyre::{Context, eyre},
+};
 use report::{Issue, Severity};
 use reqwest::redirect::Policy as RedirectPolicy;
 
-use crate::cli::Cli;
+use crate::cli::{Cli, Commands};
 use crate::collector::{CollectorConfig, start_server};
 use crate::linter::lint;
 use crate::parser::parse_policy;
@@ -21,7 +23,8 @@ use crate::policy::{Disposition, Policy};
 use crate::report::Report;
 
 #[tokio::main]
-async fn main() -> ExitCode {
+async fn main() -> Result<()> {
+    color_eyre::install()?;
     let cli = Cli::parse();
 
     match cli.command {
@@ -30,25 +33,51 @@ async fn main() -> ExitCode {
             source,
             headers,
             follow_redirects,
-        } => run_audit(raw, source, headers, follow_redirects).await,
+        } => run_audit(raw, source, headers, follow_redirects).await?,
         Commands::Collect {
             address,
             webhook_url,
             webhook_template,
-        } => run_collect(address, webhook_url, webhook_template).await,
+            webhook_headers,
+        } => run_collect(address, webhook_url, webhook_template, webhook_headers).await?,
     }
+
+    Ok(())
 }
 
-async fn run_collect(address: String, webhook_url: String, webhook_template: String) -> ExitCode {
+async fn run_collect(
+    address: String,
+    webhook_url: String,
+    webhook_template: String,
+    webhook_headers: Vec<String>,
+) -> Result<()> {
     tracing_subscriber::fmt().json().init();
+
+    let webhook_headers = HeaderMap::from_iter(
+        webhook_headers
+            .iter()
+            .map(|header| {
+                let (name, value) = header.split_once(':').ok_or(eyre!(
+                    "webhook header '{header}' is malformed: expected '<name>:<value>'"
+                ))?;
+                let name = HeaderName::from_bytes(name.as_bytes())
+                    .wrap_err("webhook header '{header}' is malformed: invalid header name")?;
+                let value = HeaderValue::from_str(value)
+                    .wrap_err("webhook header '{header}' is malformed: invalid header value")?;
+                Ok((name, value))
+            })
+            .collect::<Result<Vec<_>>>()?
+            .into_iter(),
+    );
 
     let config = CollectorConfig {
         address,
         webhook_url,
         webhook_template,
+        webhook_headers,
     };
-    start_server(config).await;
-    ExitCode::SUCCESS
+    start_server(config).await?;
+    Ok(())
 }
 
 async fn run_audit(
@@ -56,7 +85,7 @@ async fn run_audit(
     source: String,
     headers: Vec<String>,
     follow_redirects: bool,
-) -> ExitCode {
+) -> Result<()> {
     let (origin, enforce_set, report_set) = if !raw {
         let response = {
             let mut client = reqwest::Client::builder()
@@ -152,8 +181,8 @@ async fn run_audit(
     report.show();
 
     if report.reaches_severity(Severity::High) {
-        ExitCode::FAILURE
+        Err(eyre!("High severity issues found"))
     } else {
-        ExitCode::SUCCESS
+        Ok(())
     }
 }

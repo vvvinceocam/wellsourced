@@ -1,8 +1,12 @@
-use axum::{Json, Router, extract::State, routing::post};
-use handlebars::{Handlebars, no_escape};
+mod template;
+
+use axum::{Json, Router, extract::State, http::HeaderMap, routing::post};
+use color_eyre::{Result, eyre::Context};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use tracing::{error, info};
+
+use crate::collector::template::render;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
@@ -25,6 +29,7 @@ pub struct LegacyReport {
     column_number: Option<u32>,
 }
 
+/// Produce logs and asynchronously send a webhook report.
 async fn post_report(
     State(state): State<AppState>,
     Json(LegacyWrapper { csp_report }): Json<LegacyWrapper<LegacyReport>>,
@@ -41,25 +46,42 @@ async fn post_report(
         "lineNumber" = csp_report.line_number,
         "columnNumber" = csp_report.column_number,
     );
-    let mut reg = Handlebars::new();
-    reg.register_escape_fn(no_escape);
 
-    let payload = reg
-        .render_template(&state.webhook_template, &csp_report)
-        .unwrap();
+    tokio::spawn(async move {
+        let payload = match render(&state.webhook_template, &csp_report) {
+            Ok(payload) => payload,
+            Err(err) => {
+                error!(
+                    message = "failed to render webhook payload",
+                    error = err.to_string(),
+                );
+                return;
+            }
+        };
 
-    let response = state
-        .client
-        .post(state.webhook_url)
-        .header("Content-Type", "application/json")
-        .body(payload)
-        .send()
-        .await
-        .unwrap();
+        let response = state
+            .client
+            .post(state.webhook_url)
+            .headers(state.webhook_headers)
+            .header("Content-Type", "application/json")
+            .body(payload)
+            .send()
+            .await;
 
-    if !response.status().is_success() {
-        error!("failed to post webhook");
-    }
+        let response = match response {
+            Ok(response) => response,
+            Err(err) => {
+                error!(message = "failed to post webhook", error = err.to_string());
+                return;
+            }
+        };
+
+        if !response.status().is_success() {
+            let status_code = response.status().as_u16();
+            let error = response.text().await.unwrap_or("<empty>".to_string());
+            error!(message = "webhook response is error", status_code, error);
+        };
+    });
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +89,7 @@ pub struct CollectorConfig {
     pub address: String,
     pub webhook_url: String,
     pub webhook_template: String,
+    pub webhook_headers: HeaderMap,
 }
 
 #[derive(Debug, Clone)]
@@ -74,13 +97,15 @@ pub struct AppState {
     client: Client,
     webhook_url: String,
     webhook_template: String,
+    webhook_headers: HeaderMap,
 }
 
-pub async fn start_server(config: CollectorConfig) {
+pub async fn start_server(config: CollectorConfig) -> Result<()> {
     let state = AppState {
         client: Client::new(),
         webhook_url: config.webhook_url,
         webhook_template: config.webhook_template,
+        webhook_headers: config.webhook_headers,
     };
 
     info!("starting server listening on {}", config.address);
@@ -88,6 +113,12 @@ pub async fn start_server(config: CollectorConfig) {
         .route("/", post(post_report))
         .with_state(state);
 
-    let listener = tokio::net::TcpListener::bind(config.address).await.unwrap();
-    axum::serve(listener, app).await.unwrap();
+    let listener = tokio::net::TcpListener::bind(config.address)
+        .await
+        .wrap_err("failed to bind port")?;
+    axum::serve(listener, app)
+        .await
+        .wrap_err("failed to start HTTP server")?;
+
+    Ok(())
 }
