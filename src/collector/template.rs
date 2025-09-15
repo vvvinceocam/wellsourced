@@ -58,9 +58,8 @@ fn get_nested_value<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
 
 #[cfg(test)]
 mod tests {
-    use crate::collector::LegacyReport;
-
     use super::*;
+    use crate::collector::report::LegacyReport;
     use serde_json::json;
 
     #[test]
