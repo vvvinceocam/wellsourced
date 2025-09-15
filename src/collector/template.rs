@@ -160,9 +160,9 @@ mod tests {
             referrer: "https://referrer.com".to_string(),
             status_code: 200,
             violated_directive: "script-src 'self'".to_string(),
-            source_file: Some("index.html".to_string()),
-            line_number: Some(42),
-            column_number: Some(10),
+            source_file: "index.html".to_string(),
+            line_number: 42,
+            column_number: 10,
         };
 
         let template = "{ \"message\": \"CSP violation: {{blocked-uri}} on {{document-uri}} at line {{line-number}}\" }";

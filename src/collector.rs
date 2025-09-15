@@ -14,6 +14,7 @@ pub struct LegacyWrapper<T> {
     pub csp_report: T,
 }
 
+/// Content Security Policy Level 2 violation report.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub struct LegacyReport {
@@ -24,9 +25,18 @@ pub struct LegacyReport {
     referrer: String,
     status_code: u16,
     violated_directive: String,
-    source_file: Option<String>,
-    line_number: Option<u32>,
-    column_number: Option<u32>,
+    #[serde(default = "LegacyReport::default_source_file")]
+    source_file: String,
+    #[serde(default)]
+    line_number: u32,
+    #[serde(default)]
+    column_number: u32,
+}
+
+impl LegacyReport {
+    fn default_source_file() -> String {
+        String::from("<no-file>")
+    }
 }
 
 /// Produce logs and asynchronously send a webhook report.
