@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use crate::policy::{
     Directive, DirectiveKind, HashAlgorithm, HashSource, Host, HostSource, KeywordSource,
-    NonceSource, Policy, SchemeSource, Source, SourceExpression,
+    NonceSource, Policy, RelativeReportUriSource, SchemeSource, Source, SourceExpression,
 };
 
 impl Display for Policy {
@@ -81,6 +81,9 @@ impl Display for SourceExpression {
             SourceExpression::Scheme(scheme_source) => write!(f, "{}", scheme_source),
             SourceExpression::Hash(hash_source) => write!(f, "{}", hash_source),
             SourceExpression::Nonce(nonce_source) => write!(f, "{}", nonce_source),
+            SourceExpression::RelativeReportUri(relative_report_uri_source) => {
+                write!(f, "{}", relative_report_uri_source)
+            }
             SourceExpression::Unknown(source) => write!(f, "{source}"),
         }
     }
@@ -135,7 +138,13 @@ impl Display for HostSource {
         match &self.host {
             Host::IpAddress(a, b, c, d) => write!(f, "{a}.{b}.{c}.{d}"),
             Host::Fqdn(fqdn) => write!(f, "{fqdn}"),
-            Host::Wildcard(fqdn) => write!(f, "*.{fqdn}"),
+            Host::Wildcard(fqdn) => {
+                if fqdn.is_empty() {
+                    write!(f, "*")
+                } else {
+                    write!(f, "*.{fqdn}")
+                }
+            }
         }?;
 
         if let Some(port) = &self.port {
@@ -173,5 +182,11 @@ impl Display for HashSource {
 impl Display for NonceSource {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "'nonce-{}'", self.0)
+    }
+}
+
+impl Display for RelativeReportUriSource {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }

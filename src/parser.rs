@@ -10,7 +10,8 @@ use winnow::{
 
 use crate::policy::{
     Directive, DirectiveKind, Disposition, HashAlgorithm, HashSource, Host, HostSource,
-    KeywordSource, NonceSource, Policy, SchemeSource, Source, SourceExpression,
+    KeywordSource, NonceSource, Policy, RelativeReportUriSource, SchemeSource, Source,
+    SourceExpression,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -134,6 +135,7 @@ fn source(input: &mut LocatingSlice<&str>) -> Result<Source> {
             hash_source.map(Hash),
             terminated(scheme_source, eof).map(Scheme),
             terminated(host_source, eof).map(Host),
+            relative_report_uri_source.map(RelativeReportUri),
             rest.map(|str: &str| Unknown(str.to_string())),
         )))
         .with_span()
@@ -247,6 +249,7 @@ fn host_source(input: &mut &str) -> Result<HostSource> {
         host: alt((
             ip_address,
             preceded("*.", host_part).map(Host::Wildcard),
+            "*".map(|_| Host::Wildcard("".to_string())),
             host_part.map(Host::Fqdn),
         )),
         port: opt(preceded(':', dec_uint)),
@@ -255,9 +258,19 @@ fn host_source(input: &mut &str) -> Result<HostSource> {
     .parse_next(input)
 }
 
+fn relative_report_uri_source(input: &mut &str) -> Result<RelativeReportUriSource> {
+    (
+        '/',
+        take_till(0.., |c: char| c.is_space() || c == ';' || c == ','),
+    )
+        .take()
+        .map(|uri: &str| RelativeReportUriSource(uri.to_string()))
+        .parse_next(input)
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::policy::KeywordSource;
+    use crate::policy::{KeywordSource, RelativeReportUriSource};
 
     use super::*;
 
@@ -354,6 +367,15 @@ mod tests {
                 SourceExpression::Unknown("https:/login".to_string()),
             ),
             (
+                "*",
+                SourceExpression::Host(HostSource {
+                    scheme: None,
+                    host: Host::Wildcard("".to_string()),
+                    port: None,
+                    path: None,
+                }),
+            ),
+            (
                 "*.other.com",
                 SourceExpression::Host(HostSource {
                     scheme: None,
@@ -361,6 +383,21 @@ mod tests {
                     port: None,
                     path: None,
                 }),
+            ),
+            (
+                "https://*",
+                SourceExpression::Host(HostSource {
+                    scheme: Some(SchemeSource::Https),
+                    host: Host::Wildcard("".to_string()),
+                    port: None,
+                    path: None,
+                }),
+            ),
+            (
+                "/some/path",
+                SourceExpression::RelativeReportUri(RelativeReportUriSource(
+                    "/some/path".to_string(),
+                )),
             ),
             ("'foo'", SourceExpression::Unknown("'foo'".to_string())),
         ];
