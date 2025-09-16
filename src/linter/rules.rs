@@ -4,10 +4,13 @@ mod host_source_is_self;
 mod insecure_scheme;
 mod missing_source;
 mod no_base_uri;
+mod no_enforce_policy;
 mod no_form_action;
 mod no_upgrade_insecure_requests;
 mod repeated_directive;
 mod repeated_source;
+mod unknown_directive;
+mod unknown_source;
 
 pub fn get_rules() -> Vec<Box<dyn Rule>> {
     vec![
@@ -15,9 +18,12 @@ pub fn get_rules() -> Vec<Box<dyn Rule>> {
         Box::new(insecure_scheme::InsecureScheme {}),
         Box::new(missing_source::MissingSource {}),
         Box::new(no_base_uri::NoBaseUri {}),
+        Box::new(no_enforce_policy::NoEnforcePolicy {}),
         Box::new(no_form_action::NoFormAction {}),
         Box::new(no_upgrade_insecure_requests::NoUpgradeInsecureRequests {}),
         Box::new(repeated_directive::RepeatedDirective {}),
         Box::new(repeated_source::RepeatedSource {}),
+        Box::new(unknown_directive::UnknownDirective {}),
+        Box::new(unknown_source::UnknownSource {}),
     ]
 }

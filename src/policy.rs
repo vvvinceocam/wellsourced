@@ -7,6 +7,11 @@ pub enum Disposition {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PolicySet {
+    pub policies: Vec<Policy>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Policy {
     pub original: String,
     pub disposition: Disposition,
@@ -75,6 +80,7 @@ pub enum SourceExpression {
     Scheme(SchemeSource),
     Hash(HashSource),
     Nonce(NonceSource),
+    RelativeReportUri(RelativeReportUriSource),
     Unknown(String),
 }
 
@@ -134,6 +140,9 @@ pub struct HashSource {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct NonceSource(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct RelativeReportUriSource(pub String);
 
 impl DirectiveKind {
     pub fn must_have_no_source(&self) -> bool {
