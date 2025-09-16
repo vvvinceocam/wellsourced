@@ -7,6 +7,11 @@ pub enum Disposition {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PolicySet {
+    pub policies: Vec<Policy>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Policy {
     pub original: String,
     pub disposition: Disposition,

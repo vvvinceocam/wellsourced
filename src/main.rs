@@ -7,6 +7,8 @@ mod policy;
 mod report;
 mod utils;
 
+use std::process::exit;
+
 use axum::http::{HeaderMap, HeaderName, HeaderValue};
 use clap::Parser;
 use color_eyre::{
@@ -16,14 +18,17 @@ use color_eyre::{
 use report::{Issue, Severity};
 use reqwest::redirect::Policy as RedirectPolicy;
 
-use crate::collector::{CollectorConfig, start_server};
 use crate::linter::lint;
 use crate::parser::parse_policy;
-use crate::policy::{Disposition, Policy};
+use crate::policy::Disposition;
 use crate::report::Report;
 use crate::{
     cli::{Cli, Commands},
     utils::collect_headers,
+};
+use crate::{
+    collector::{CollectorConfig, start_server},
+    policy::PolicySet,
 };
 
 #[tokio::main]
@@ -122,59 +127,38 @@ async fn run_audit(
 
     let mut report = Report::new();
 
-    match (enforce_set.first(), report_set.first()) {
-        (None, None) => {
-            report.add_issue(
-                Issue::builder()
-                    .severity(Severity::Critical)
-                    .description("No Content-Security-Policy header found".to_string())
-                    .build(),
-            );
-        }
-        (None, Some(_)) => {
-            report.add_issue(Issue::builder()
-                .severity(Severity::High)
-                .description("No Content-Security-Policy header found, only CSP-Report-Only header found".to_string())
-                .build());
-        }
-        (Some(_), Some(_)) => {
-            report.add_issue(
-                Issue::builder()
-                    .severity(Severity::Low)
-                    .description("Both CSP and CSP-Report-Only headers found".to_string())
-                    .build(),
-            );
-        }
-        (Some(_), None) => {}
+    let policy_set = {
+        let policies = enforce_set
+            .iter()
+            .map(|policy| parse_policy(policy, Disposition::Enforce))
+            .chain(
+                report_set
+                    .iter()
+                    .map(|policy| parse_policy(policy, Disposition::Report)),
+            )
+            .filter_map(|policy| match policy {
+                Ok(policy) => Some(policy),
+                Err(err) => {
+                    report.add_issue(
+                        Issue::builder()
+                            .severity(Severity::Critical)
+                            .description(format!("Invalid CSP policy: {}", err))
+                            .build(),
+                    );
+                    None
+                }
+            })
+            .collect();
+
+        PolicySet { policies }
     };
 
-    if let Some(csp) = enforce_set.first() {
-        let policy = match parse_policy(csp, Disposition::Enforce) {
-            Ok(policy) => policy,
-            Err(err) => {
-                report.add_issue(
-                    Issue::builder()
-                        .severity(Severity::Critical)
-                        .description(format!("Malformed Content-Security-Policy header: {}", err))
-                        .build(),
-                );
-                Policy {
-                    disposition: Disposition::Enforce,
-                    original: "".to_string(),
-                    directives: vec![],
-                }
-            }
-        };
-
-        println!("{}", &policy);
-
-        lint(&mut report, origin, policy);
-    }
+    lint(&mut report, origin, policy_set);
 
     report.show();
 
     if report.reaches_severity(Severity::High) {
-        Err(eyre!("High severity issues found"))
+        exit(1);
     } else {
         Ok(())
     }
