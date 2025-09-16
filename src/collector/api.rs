@@ -1,9 +1,9 @@
-use axum::{Json, extract::State, http::StatusCode};
+use axum::{extract::State, http::StatusCode};
 use tracing::{error, info};
 
 use crate::collector::{
     AppState,
-    report::{LegacyReport, LegacyWrapper},
+    report::{Report, ReportLevel2},
     template::render,
 };
 
@@ -23,7 +23,7 @@ pub async fn get_metrics(State(state): State<AppState>) -> (StatusCode, String) 
 /// Produce logs and asynchronously send a webhook report.
 pub async fn post_report(
     State(state): State<AppState>,
-    Json(LegacyWrapper { csp_report }): Json<LegacyWrapper<LegacyReport>>,
+    Report(ReportLevel2 { csp_report }): Report<ReportLevel2>,
 ) {
     state.metrics.inc_report();
     info!(

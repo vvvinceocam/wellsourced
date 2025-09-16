@@ -59,7 +59,7 @@ fn get_nested_value<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::collector::report::LegacyReport;
+    use crate::collector::report::BodyLevel2;
     use serde_json::json;
 
     #[test]
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn render_legacy_report() {
-        let report = LegacyReport {
+        let report = BodyLevel2 {
             blocked_uri: "https://example.com/script.js".to_string(),
             document_uri: "https://mysite.com".to_string(),
             effective_directive: "script-src".to_string(),
